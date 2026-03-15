@@ -1,0 +1,82 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-1: #070d1a;
+  --bg-2: #0c1730;
+  --panel: #101c34;
+  --panel-soft: #0b152a;
+  --ink: #e8f1ff;
+  --ink-soft: #9eb0d2;
+  --border: #23395c;
+  --brand: #74b2ff;
+  --brand-strong: #8cc0ff;
+  --accent: #59e3ff;
+  --warning: #ff8f99;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 20% 0%, rgb(116 178 255 / 20%) 0, transparent 34%),
+    radial-gradient(circle at 90% 10%, rgb(89 227 255 / 14%) 0, transparent 30%),
+    linear-gradient(170deg, var(--bg-1) 0%, var(--bg-2) 100%);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-family: 'Sora', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+p {
+  margin: 0;
+}
+
+.rise {
+  animation: rise-in 260ms ease-out both;
+}
+
+.blink-dot {
+  animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
