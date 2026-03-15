@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 type Role = "assistant" | "user";
 
@@ -40,14 +40,6 @@ type Provider = {
   availabilities: string[];
 };
 
-const WEEKDAY_PATTERNS: Record<string, RegExp> = {
-  Monday: /\bmonday\b|\bmon\b/i,
-  Tuesday: /\btuesday\b|\btue\b|\btues\b/i,
-  Wednesday: /\bwednesday\b|\bwed\b/i,
-  Thursday: /\bthursday\b|\bthu\b|\bthurs\b/i,
-  Friday: /\bfriday\b|\bfri\b/i,
-};
-
 const SAFETY_KEYWORDS = [
   "diagnose",
   "diagnosis",
@@ -64,12 +56,6 @@ const HELP_COPY =
   "I can help with scheduling, prescription refill check-ins, and office hours or address questions.";
 
 const SESSION_REFERENCE = "KY-INTERVIEW-MVP";
-const GEMINI_MODEL =
-  (import.meta.env.VITE_GEMINI_MODEL as string | undefined) ||
-  "gemini-2.5-flash";
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as
-  | string
-  | undefined;
 
 function nextBusinessDaySlots(
   targetWeekday: number,
@@ -171,16 +157,6 @@ function formatSlot(isoDateTime: string) {
   });
 }
 
-function extractWeekdayPreference(text: string) {
-  for (const [weekday, pattern] of Object.entries(WEEKDAY_PATTERNS)) {
-    if (pattern.test(text)) {
-      return weekday;
-    }
-  }
-
-  return null;
-}
-
 function findProvider(reason: string) {
   const normalizedReason = reason.toLowerCase();
 
@@ -189,25 +165,6 @@ function findProvider(reason: string) {
       provider.bodyParts.some((part) => normalizedReason.includes(part)),
     ) ?? null
   );
-}
-
-function hasSafetyConcern(text: string) {
-  const lower = text.toLowerCase();
-  return SAFETY_KEYWORDS.some((word) => lower.includes(word));
-}
-
-function isLikelySchedulingQuestion(text: string) {
-  return /appointment|schedule|book|availability|slot|see a doctor|visit/i.test(
-    text,
-  );
-}
-
-function isLikelyRefillRequest(text: string) {
-  return /refill|prescription|rx/i.test(text);
-}
-
-function isLikelyHoursRequest(text: string) {
-  return /hours|address|location|where|office|open/i.test(text);
 }
 
 function validateField(field: IntakeField, value: string) {
@@ -226,6 +183,11 @@ function validateField(field: IntakeField, value: string) {
   return value.length > 1;
 }
 
+function hasSafetyConcern(text: string) {
+  const normalized = text.toLowerCase();
+  return SAFETY_KEYWORDS.some((keyword) => normalized.includes(keyword));
+}
+
 function App() {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -241,24 +203,9 @@ function App() {
   const [formError, setFormError] = useState<string | null>(null);
   const [providerMatch, setProviderMatch] = useState<Provider | null>(null);
   const [slotOptions, setSlotOptions] = useState<string[]>([]);
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [voiceReady, setVoiceReady] = useState(false);
   const [voiceResumeCount, setVoiceResumeCount] = useState(0);
   const [isAiResponding, setIsAiResponding] = useState(false);
-
-  const appointmentSummary = useMemo(() => {
-    if (!providerMatch || !selectedSlot) {
-      return null;
-    }
-
-    return {
-      providerName: providerMatch.name,
-      specialty: providerMatch.specialty,
-      officeName: providerMatch.officeName,
-      address: providerMatch.address,
-      dateTime: formatSlot(selectedSlot),
-    };
-  }, [providerMatch, selectedSlot]);
 
   const pushMessage = (role: Role, text: string) => {
     setMessages((current) => [
@@ -274,112 +221,45 @@ function App() {
     ).join("\n");
   };
 
-  const sendBookingNotifications = async (
-    slotIso: string,
-    providerName: string,
-  ) => {
+  const askBackendChat = async (userText: string) => {
     try {
-      const response = await fetch("/api/notifications/booking", {
+      const response = await fetch("/api/chat/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          patient: intake,
-          appointment: {
-            providerName,
-            slotIso,
-            slotDisplay: formatSlot(slotIso),
+          conversationId: SESSION_REFERENCE,
+          message: userText,
+          messages: messages.concat({ role: "user", text: userText }),
+          context: {
+            workflow,
+            intake,
+            providerMatch,
+            slotOptions: slotOptions.map((slot) => formatSlot(slot)),
+            officeSummary: getOfficeSummary(),
+            providers: PROVIDERS.map((provider) => ({
+              name: provider.name,
+              specialty: provider.specialty,
+              bodyParts: provider.bodyParts,
+              officeName: provider.officeName,
+              address: provider.address,
+              hours: provider.hours,
+              availabilities: provider.availabilities.map((slot) =>
+                formatSlot(slot),
+              ),
+            })),
           },
         }),
       });
 
       if (!response.ok) {
-        throw new Error("notification API unavailable");
+        return null;
       }
 
-      const result = (await response.json()) as {
-        emailStatus?: string;
-        smsStatus?: string;
-      };
-
-      return {
-        emailStatus: result.emailStatus || "sent",
-        smsStatus: result.smsStatus || (intake.smsOptIn ? "sent" : "skipped"),
-      };
+      const payload = (await response.json()) as { reply?: string };
+      return payload.reply || null;
     } catch {
-      return {
-        emailStatus: "pending-backend",
-        smsStatus: intake.smsOptIn ? "pending-backend" : "skipped",
-      };
-    }
-  };
-
-  const askGemini = async (userText: string) => {
-    if (!GEMINI_API_KEY) {
       return null;
     }
-
-    const systemPrompt = [
-      "You are Kyron Care Assistant for a physician group.",
-      "You can help with: scheduling guidance, prescription refill check-ins, office hours/address questions.",
-      "Never provide medical advice or diagnosis.",
-      "If asked for medical advice, refuse and redirect to emergency services if urgent.",
-      "Keep responses concise and clear.",
-      "Intake fields must be collected in the intake form, not in chat.",
-      `Current workflow: ${workflow}.`,
-      providerMatch
-        ? `Matched provider: ${providerMatch.name} (${providerMatch.specialty}).`
-        : "No provider matched yet.",
-      workflow === "slot-selection"
-        ? `Current slot options:\n${renderSlotList(slotOptions)}`
-        : "",
-      `Office details:\n${getOfficeSummary()}`,
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: systemPrompt }],
-          },
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: userText }],
-            },
-          ],
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = (await response.json()) as {
-      candidates?: Array<{
-        content?: { parts?: Array<{ text?: string }> };
-      }>;
-    };
-
-    const text =
-      data.candidates?.[0]?.content?.parts
-        ?.map((part) => part.text || "")
-        .join("\n")
-        .trim() || "";
-
-    return text || null;
-  };
-
-  const renderSlotList = (slots: string[]) => {
-    return slots
-      .slice(0, 6)
-      .map((slot, index) => `${index + 1}. ${formatSlot(slot)}`)
-      .join("\n");
   };
 
   const pickSlotFromInput = (text: string) => {
@@ -425,7 +305,7 @@ function App() {
     );
   };
 
-  const handleIntakeFormSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleIntakeFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const normalized: PatientIntake = {
@@ -459,7 +339,6 @@ function App() {
     setFormError(null);
     setIntake(normalized);
     setVoiceReady(false);
-    setSelectedSlot(null);
 
     const matchedProvider = findProvider(normalized.reason);
     if (!matchedProvider) {
@@ -473,28 +352,23 @@ function App() {
       return;
     }
 
-    const weekdayPreference = extractWeekdayPreference(normalized.reason);
+    // Set context for slot selection, but let Gemini respond
     const allSlots = matchedProvider.availabilities.slice(0, 12);
-    const filteredSlots =
-      weekdayPreference === null
-        ? allSlots
-        : allSlots.filter((slot) => {
-            const weekday = new Date(slot).toLocaleDateString([], {
-              weekday: "long",
-            });
-            return weekday.toLowerCase() === weekdayPreference.toLowerCase();
-          });
-
-    const finalSlots = filteredSlots.length > 0 ? filteredSlots : allSlots;
-
     setProviderMatch(matchedProvider);
-    setSlotOptions(finalSlots);
+    setSlotOptions(allSlots);
     setWorkflow("slot-selection");
 
-    pushMessage(
-      "assistant",
-      `Intake received. I matched you to ${matchedProvider.name} (${matchedProvider.specialty}).\nHere are available times:\n${renderSlotList(finalSlots)}\n\nReply in chat with a number to book (or ask for a weekday like Tuesday).`,
+    // Ask Gemini for available times using intake context
+    setIsAiResponding(true);
+    const geminiReply = await askBackendChat(
+      `A patient has completed the intake form. Please match them to a provider and show available appointment times based on their preferences. If they mention a weekday or time, only show those slots. If not, show all available slots. Here is the intake and context.`,
     );
+    setIsAiResponding(false);
+    if (geminiReply) {
+      pushMessage("assistant", geminiReply);
+    } else {
+      pushMessage("assistant", HELP_COPY);
+    }
   };
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -508,49 +382,13 @@ function App() {
     pushMessage("user", text);
 
     if (workflow === "slot-selection" && providerMatch) {
-      const weekdayPreference = extractWeekdayPreference(text);
-      if (weekdayPreference) {
-        const weekdaySlots = providerMatch.availabilities.filter((slot) => {
-          const weekday = new Date(slot).toLocaleDateString([], {
-            weekday: "long",
-          });
-          return weekday.toLowerCase() === weekdayPreference.toLowerCase();
-        });
-
-        if (weekdaySlots.length === 0) {
-          pushMessage(
-            "assistant",
-            `I do not have ${weekdayPreference} openings in the next window. Here are the next best options:\n${renderSlotList(slotOptions)}`,
-          );
-          return;
-        }
-
-        setSlotOptions(weekdaySlots);
-        pushMessage(
-          "assistant",
-          `Here are ${weekdayPreference} options:\n${renderSlotList(weekdaySlots)}\n\nReply with a number to book.`,
-        );
-        return;
-      }
-
       const selected = pickSlotFromInput(text);
       if (selected) {
-        setSelectedSlot(selected);
         setWorkflow("booked");
         setVoiceReady(true);
-
-        const notificationResult = await sendBookingNotifications(
-          selected,
-          providerMatch.name,
-        );
-
-        const smsLine = intake.smsOptIn
-          ? `SMS status: ${notificationResult.smsStatus}.`
-          : "SMS reminders are currently off.";
-
         pushMessage(
           "assistant",
-          `Appointment booked for ${formatSlot(selected)} with ${providerMatch.name}. Email status: ${notificationResult.emailStatus}. ${smsLine}`,
+          `Appointment booked for ${formatSlot(selected)} with ${providerMatch.name}.`,
         );
         return;
       }
@@ -564,48 +402,8 @@ function App() {
       return;
     }
 
-    if (isLikelyHoursRequest(text)) {
-      pushMessage(
-        "assistant",
-        `Here are our office details:\n${getOfficeSummary()}`,
-      );
-      return;
-    }
-
-    if (isLikelySchedulingQuestion(text)) {
-      if (workflow === "booked" && appointmentSummary) {
-        pushMessage(
-          "assistant",
-          `You are booked for ${appointmentSummary.dateTime} with ${appointmentSummary.providerName}.`,
-        );
-        return;
-      }
-
-      if (workflow === "slot-selection" && providerMatch) {
-        pushMessage(
-          "assistant",
-          `You are matched with ${providerMatch.name}. Pick a slot by replying with a number:\n${renderSlotList(slotOptions)}\n\n(You can also ask for a weekday, for example: Tuesday.)`,
-        );
-        return;
-      }
-
-      pushMessage(
-        "assistant",
-        "Please complete and submit the intake form to get scheduling options.",
-      );
-      return;
-    }
-
-    if (isLikelyRefillRequest(text)) {
-      pushMessage(
-        "assistant",
-        "For prescription refill check-ins, share medication name and preferred pharmacy. I can prepare a refill request for the care team (backend workflow pending).",
-      );
-      return;
-    }
-
     setIsAiResponding(true);
-    const geminiReply = await askGemini(text);
+    const geminiReply = await askBackendChat(text);
     setIsAiResponding(false);
 
     if (geminiReply) {
@@ -617,7 +415,7 @@ function App() {
   };
 
   return (
-    <main className='mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-6 md:px-8'>
+    <main className='mx-auto flex w-full max-w-7xl flex-col px-4 py-6 md:px-8'>
       <header className='rise mb-4 rounded-2xl border border-[var(--border)] bg-[color:var(--panel)] p-4 shadow-[0_10px_40px_rgb(0_0_0_/_0.35)] md:p-6'>
         <div className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
           <div>
@@ -640,9 +438,6 @@ function App() {
       <section className='grid flex-1 gap-4 md:grid-cols-2'>
         <section className='rise rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4 md:p-5'>
           <h2 className='text-lg text-[var(--ink)]'>Patient Intake Form</h2>
-          <p className='mt-1 text-sm text-[var(--ink-soft)]'>
-            Scheduling is handled only from this form.
-          </p>
 
           <form className='mt-4 space-y-3' onSubmit={handleIntakeFormSubmit}>
             <div className='grid gap-3 sm:grid-cols-2'>
@@ -770,7 +565,6 @@ function App() {
                   setFormError(null);
                   setProviderMatch(null);
                   setSlotOptions([]);
-                  setSelectedSlot(null);
                   setWorkflow("intake-pending");
                   setVoiceReady(false);
                 }}
@@ -784,9 +578,6 @@ function App() {
         <div className='rise flex min-h-[60vh] flex-col rounded-2xl border border-[var(--border)] bg-[var(--panel)]'>
           <div className='border-b border-[var(--border)] px-4 py-3 md:px-5'>
             <h2 className='text-lg text-[var(--ink)]'>Chat</h2>
-            <p className='text-sm text-[var(--ink-soft)]'>
-              Q&A support for scheduling, refill check-ins, and office details.
-            </p>
           </div>
 
           <div className='flex-1 space-y-3 overflow-y-auto px-4 py-4 md:px-5'>
@@ -815,7 +606,7 @@ function App() {
               <textarea
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                rows={2}
+                rows={1}
                 placeholder='Ask about scheduling, refill check-ins, or office details...'
                 className='w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--brand)]'
               />

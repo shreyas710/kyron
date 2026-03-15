@@ -1,27 +1,39 @@
-# Backend Placeholder (Node.js)
+# Kyron Backend (Node.js)
 
-This folder is intentionally left as a placeholder.
+This backend handles Gemini chat requests.
 
-## Planned API contracts
+## Endpoints
+
+- `GET /api/health`
+  - Health check.
 
 - `POST /api/chat/message`
-  - Input: `{ conversationId, message, patientContext }`
-  - Output: `{ reply, workflowState, suggestedActions }`
+  - Input: `{ message, context }`
+  - Output: `{ reply }`
+  - Calls Gemini from backend using server-side API key.
 
-- `POST /api/appointments/book`
-  - Input: `{ patient, providerId, slotIso, reason, smsOptIn }`
-  - Output: `{ bookingId, emailStatus, smsStatus }`
+## Setup
 
-- `POST /api/voice/handoff`
-  - Input: `{ conversationId, phone }`
-  - Output: `{ callSessionId, status }`
+1. Install dependencies:
 
-- `POST /api/refills/check`
-  - Input: `{ patient, medication, pharmacy }`
-  - Output: `{ status, nextStep }`
+```bash
+cd backend
+npm install
+```
 
-## Notes
+2. Create environment file:
 
-- Keep conversation state centralized so web chat and voice calls share memory.
-- Add PHI-safe logging and audit trails.
-- Integrate email/SMS delivery and explicit SMS opt-in handling.
+```bash
+cp .env.example .env
+```
+
+3. Fill required env vars in `.env`:
+- `GEMINI_API_KEY`
+
+4. Run backend:
+
+```bash
+npm run dev
+```
+
+Server starts on `http://localhost:8787` by default.
