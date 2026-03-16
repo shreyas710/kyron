@@ -17,12 +17,12 @@ export function IntakeForm({
   resetForm,
 }: IntakeFormProps) {
   return (
-    <section className='rise flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4 md:p-5'>
-      <h2 className='text-lg text-[var(--ink)]'>Patient Intake Form</h2>
+    <section className='rise flex flex-col rounded-2xl border border-gray-200 bg-white p-4 md:p-5'>
+      <h2 className='text-lg text-gray-900'>Patient Intake Form</h2>
 
       <form className='mt-4 space-y-3' onSubmit={handleIntakeFormSubmit}>
         <div className='grid gap-3 sm:grid-cols-2'>
-          <label className='text-sm text-[var(--ink-soft)]'>
+          <label className='text-sm text-gray-600'>
             First name
             <input
               value={intakeDraft.firstName}
@@ -32,11 +32,11 @@ export function IntakeForm({
                   firstName: event.target.value,
                 }))
               }
-              className='mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--brand)]'
+              className='mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-600'
               placeholder='Jane'
             />
           </label>
-          <label className='text-sm text-[var(--ink-soft)]'>
+          <label className='text-sm text-gray-600'>
             Last name
             <input
               value={intakeDraft.lastName}
@@ -46,13 +46,13 @@ export function IntakeForm({
                   lastName: event.target.value,
                 }))
               }
-              className='mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--brand)]'
+              className='mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-600'
               placeholder='Doe'
             />
           </label>
         </div>
 
-        <label className='block text-sm text-[var(--ink-soft)]'>
+        <label className='block text-sm text-gray-600'>
           Date of birth (MM/DD/YYYY)
           <input
             value={intakeDraft.dob}
@@ -62,12 +62,12 @@ export function IntakeForm({
                 dob: event.target.value,
               }))
             }
-            className='mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--brand)]'
+            className='mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-600'
             placeholder='01/31/1990'
           />
         </label>
 
-        <label className='block text-sm text-[var(--ink-soft)]'>
+        <label className='block text-sm text-gray-600'>
           Phone number
           <input
             value={intakeDraft.phone}
@@ -77,12 +77,12 @@ export function IntakeForm({
                 phone: event.target.value,
               }))
             }
-            className='mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--brand)]'
+            className='mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-600'
             placeholder='(555) 123-4567'
           />
         </label>
 
-        <label className='block text-sm text-[var(--ink-soft)]'>
+        <label className='block text-sm text-gray-600'>
           Email
           <input
             value={intakeDraft.email}
@@ -92,12 +92,12 @@ export function IntakeForm({
                 email: event.target.value,
               }))
             }
-            className='mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--brand)]'
+            className='mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-600'
             placeholder='jane@example.com'
           />
         </label>
 
-        <label className='block text-sm text-[var(--ink-soft)]'>
+        <label className='block text-sm text-gray-600'>
           Reason for appointment / body part
           <textarea
             value={intakeDraft.reason}
@@ -108,12 +108,12 @@ export function IntakeForm({
               }))
             }
             rows={3}
-            className='mt-1 w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--brand)]'
+            className='mt-1 w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-600'
             placeholder='Example: knee pain and Tuesday availability'
           />
         </label>
 
-        <label className='flex items-center gap-2 text-sm text-[var(--ink-soft)]'>
+        <label className='flex items-center gap-2 text-sm text-gray-600'>
           <input
             type='checkbox'
             checked={intakeDraft.smsOptIn}
@@ -128,7 +128,7 @@ export function IntakeForm({
         </label>
 
         {formError ? (
-          <p className='rounded-lg bg-[#2a1d21] px-3 py-2 text-sm text-[#ff9ea8]'>
+          <p className='rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600'>
             {formError}
           </p>
         ) : null}
@@ -136,13 +136,13 @@ export function IntakeForm({
         <div className='flex flex-wrap gap-2'>
           <button
             type='submit'
-            className='rounded-xl bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-[#08101f] transition hover:bg-[var(--brand-strong)]'>
+            className='rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700'>
             Submit Intake
           </button>
           <button
             type='button'
             onClick={resetForm}
-            className='rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-2 text-sm font-semibold text-[var(--ink)] transition hover:border-[var(--brand)]'>
+            className='rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-900 transition hover:border-blue-600'>
             Reset Form
           </button>
         </div>
