@@ -1,5 +1,7 @@
 import type { FormEvent } from "react";
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type Role = "assistant" | "user";
 
@@ -203,7 +205,6 @@ function App() {
   const [formError, setFormError] = useState<string | null>(null);
   const [providerMatch, setProviderMatch] = useState<Provider | null>(null);
   const [slotOptions, setSlotOptions] = useState<string[]>([]);
-  const [voiceReady, setVoiceReady] = useState(false);
   const [voiceResumeCount, setVoiceResumeCount] = useState(0);
   const [isAiResponding, setIsAiResponding] = useState(false);
 
@@ -280,7 +281,7 @@ function App() {
     );
   };
 
-  const handleVoiceHandoff = () => {
+  const handleVoiceHandoff = async () => {
     if (!intake.phone) {
       pushMessage(
         "assistant",
@@ -289,20 +290,44 @@ function App() {
       return;
     }
 
-    if (voiceReady) {
-      const modeText =
-        voiceResumeCount === 0
-          ? `Calling ${intake.phone} now. I will continue with full context from this chat (Ref ${SESSION_REFERENCE}).`
-          : `Welcome back. Reconnecting call to ${intake.phone} and resuming where we left off (Ref ${SESSION_REFERENCE}).`;
-      pushMessage("assistant", modeText);
-      setVoiceResumeCount((count) => count + 1);
-      return;
-    }
+    const modeText =
+      voiceResumeCount === 0
+        ? `Calling ${intake.phone} now. I will continue with full context from this chat.`
+        : `Welcome back. Reconnecting call to ${intake.phone} and resuming where we left off.`;
+    pushMessage("assistant", modeText);
+    setVoiceResumeCount((count) => count + 1);
 
-    pushMessage(
-      "assistant",
-      `Phone handoff will be available right after booking. Context is preserved under Ref ${SESSION_REFERENCE}.`,
-    );
+    try {
+      await fetch("/api/call/initiate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phoneNumber: intake.phone,
+          conversationId: SESSION_REFERENCE,
+          context: {
+            workflow,
+            intake,
+            providerMatch,
+            slotOptions: slotOptions.map((slot) => formatSlot(slot)),
+            officeSummary: getOfficeSummary(),
+            providers: PROVIDERS.map((provider) => ({
+              name: provider.name,
+              specialty: provider.specialty,
+              bodyParts: provider.bodyParts,
+              officeName: provider.officeName,
+              address: provider.address,
+              hours: provider.hours,
+              availabilities: provider.availabilities.map((slot) =>
+                formatSlot(slot),
+              ),
+            })),
+          },
+          messages,
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to initiate voice handoff", err);
+    }
   };
 
   const handleIntakeFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -338,7 +363,6 @@ function App() {
 
     setFormError(null);
     setIntake(normalized);
-    setVoiceReady(false);
 
     const matchedProvider = findProvider(normalized.reason);
     if (!matchedProvider) {
@@ -385,7 +409,6 @@ function App() {
       const selected = pickSlotFromInput(text);
       if (selected) {
         setWorkflow("booked");
-        setVoiceReady(true);
         pushMessage(
           "assistant",
           `Appointment booked for ${formatSlot(selected)} with ${providerMatch.name}.`,
@@ -435,8 +458,8 @@ function App() {
         </div>
       </header>
 
-      <section className='grid flex-1 gap-4 md:grid-cols-2'>
-        <section className='rise rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4 md:p-5'>
+      <section className='grid flex-1 gap-4 md:grid-cols-2 items-stretch'>
+        <section className='rise flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4 md:p-5'>
           <h2 className='text-lg text-[var(--ink)]'>Patient Intake Form</h2>
 
           <form className='mt-4 space-y-3' onSubmit={handleIntakeFormSubmit}>
@@ -566,7 +589,6 @@ function App() {
                   setProviderMatch(null);
                   setSlotOptions([]);
                   setWorkflow("intake-pending");
-                  setVoiceReady(false);
                 }}
                 className='rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-2 text-sm font-semibold text-[var(--ink)] transition hover:border-[var(--brand)]'>
                 Reset Form
@@ -575,48 +597,56 @@ function App() {
           </form>
         </section>
 
-        <div className='rise flex min-h-[60vh] flex-col rounded-2xl border border-[var(--border)] bg-[var(--panel)]'>
-          <div className='border-b border-[var(--border)] px-4 py-3 md:px-5'>
-            <h2 className='text-lg text-[var(--ink)]'>Chat</h2>
-          </div>
-
-          <div className='flex-1 space-y-3 overflow-y-auto px-4 py-4 md:px-5'>
-            {messages.map((message) => (
-              <article
-                key={message.id}
-                className={`rise max-w-[90%] whitespace-pre-line rounded-2xl px-4 py-3 text-sm leading-relaxed md:max-w-[84%] ${
-                  message.role === "assistant"
-                    ? "bg-[#14223f] text-[var(--ink)]"
-                    : "ml-auto bg-[#1f335c] text-[#d7e6ff]"
-                }`}>
-                {message.text}
-              </article>
-            ))}
-            {isAiResponding ? (
-              <article className='rise max-w-[90%] rounded-2xl bg-[#14223f] px-4 py-3 text-sm text-[var(--ink)] md:max-w-[84%]'>
-                Thinking...
-              </article>
-            ) : null}
-          </div>
-
-          <form
-            className='border-t border-[var(--border)] p-3 md:p-4'
-            onSubmit={onSubmit}>
-            <div className='flex items-end gap-2'>
-              <textarea
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                rows={1}
-                placeholder='Ask about scheduling, refill check-ins, or office details...'
-                className='w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--brand)]'
-              />
-              <button
-                type='submit'
-                className='rounded-xl bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-[#08101f] transition hover:bg-[var(--brand-strong)]'>
-                Send
-              </button>
+        <div className='relative h-[500px] min-h-0 md:h-auto'>
+          <div className='absolute inset-0 rise flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--panel)]'>
+            <div className='border-b border-[var(--border)] px-4 py-3 md:px-5'>
+              <h2 className='text-lg text-[var(--ink)]'>Chat</h2>
             </div>
-          </form>
+
+            <div className='flex-1 min-h-0 space-y-3 overflow-y-auto px-4 py-4 md:px-5'>
+              {messages.map((message) => (
+                <article
+                  key={message.id}
+                  className={`rise max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-relaxed md:max-w-[84%] ${
+                    message.role === "assistant"
+                      ? "bg-[#14223f] text-[var(--ink)]"
+                      : "ml-auto whitespace-pre-line bg-[#1f335c] text-[#d7e6ff]"
+                  }`}>
+                  {message.role === "assistant" ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {message.text}
+                    </ReactMarkdown>
+                  ) : (
+                    message.text
+                  )}
+                </article>
+              ))}
+              {isAiResponding ? (
+                <article className='rise max-w-[90%] rounded-2xl bg-[#14223f] px-4 py-3 text-sm text-[var(--ink)] md:max-w-[84%]'>
+                  Thinking...
+                </article>
+              ) : null}
+            </div>
+
+            <form
+              className='border-t border-[var(--border)] p-3 md:p-4'
+              onSubmit={onSubmit}>
+              <div className='flex items-end gap-2'>
+                <textarea
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  rows={1}
+                  placeholder='Ask about scheduling, refill check-ins, or office details...'
+                  className='w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--brand)]'
+                />
+                <button
+                  type='submit'
+                  className='rounded-xl bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-[#08101f] transition hover:bg-[var(--brand-strong)]'>
+                  Send
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </section>
     </main>

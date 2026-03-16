@@ -1,31 +1,40 @@
 
 import express from "express";
 import cors from "cors";
+import dotenv from "dotenv";
 import { callGemini } from "./gemini.js";
+import callRouter, { conversations } from "./call.js";
+
+dotenv.config();
 
 const app = express();
 const port = Number(process.env.PORT || 8787);
 
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.get("/api/health", (_req, res) => {
     res.json({ ok: true, service: "kyron-backend" });
 });
 
+app.use("/api/call", callRouter);
+
 app.post("/api/chat/message", async (req, res) => {
     try {
-        const { message, context, messages } = req.body || {};
+        const { message, context, messages, conversationId } = req.body || {};
 
         if (!message || typeof message !== "string") {
             return res.status(400).json({ error: "message is required" });
+        }
+        if (conversationId) {
+            conversations[conversationId] = { context, messages };
         }
 
         const gemini = await callGemini({ message, context, messages });
         if (!gemini.ok) {
             return res.status(502).json({ error: gemini.error });
         }
-
         return res.json({ reply: gemini.reply });
     } catch (error) {
         return res.status(500).json({ error: String(error) });
