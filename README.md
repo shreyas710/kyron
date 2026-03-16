@@ -3,34 +3,36 @@
 This repo currently includes:
 
 - `frontend/`: React + Tailwind patient assistant web chat MVP
-- `backend/`: Node.js backend placeholder (no backend code yet)
+- `backend/`: Node.js Express backend with Gemini AI, Twilio Voice/SMS, and Email integrations.
 
-## Frontend MVP includes
+## Full-Stack MVP Features
 
 - Intake flow for first name, last name, DOB, phone, email, and reason for appointment
 - Semantic provider matching to 4+ specialties/body parts
 - Availability options generated for days 30-60 from today
 - Natural language slot filtering such as "Tuesday"
-- Booking flow with mocked email confirmation and SMS opt-in handling
+- Booking flow with real email confirmations (Nodemailer) and SMS opt-in handling (Twilio)
 - Voice handoff button that preserves conversation context
-- Callback continuity behavior to resume after disconnection
+- Real-time Server-Sent Events (SSE) synchronization between phone call transcripts and the web chat window
 - Safety guardrail responses for medical-advice requests
 
-## Run frontend
+## Quick Start
+
+### 1. Backend Setup
+```bash
+cd backend
+npm install
+cp .env.example .env
+# Fill in GEMINI_API_KEY, TWILIO credentials, and SMTP credentials
+npm run dev
+```
+*Server starts on http://localhost:8787*
+
+### 2. Frontend Setup
+In a new terminal:
 
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-
-## Build frontend
-
-```bash
-cd frontend
-npm run build
-```
-
-## Backend note
-
-Backend endpoints are intentionally not implemented yet. See `backend/README.md` for the planned Node.js API contracts.
