@@ -1,46 +1,16 @@
 import type { FormEvent } from "react";
-import { useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-
-type Role = "assistant" | "user";
-
-type Message = {
-  id: number;
-  role: Role;
-  text: string;
-};
-
-type IntakeField =
-  | "firstName"
-  | "lastName"
-  | "dob"
-  | "phone"
-  | "email"
-  | "reason";
-
-type Workflow = "intake-pending" | "slot-selection" | "booked";
-
-type PatientIntake = {
-  firstName: string;
-  lastName: string;
-  dob: string;
-  phone: string;
-  email: string;
-  reason: string;
-  smsOptIn: boolean;
-};
-
-type Provider = {
-  id: string;
-  name: string;
-  specialty: string;
-  bodyParts: string[];
-  officeName: string;
-  address: string;
-  hours: string;
-  availabilities: string[];
-};
+import { useState, useEffect } from "react";
+import { Header } from "./components/Header";
+import { IntakeForm } from "./components/IntakeForm";
+import { ChatWindow } from "./components/ChatWindow";
+import type {
+  Message,
+  PatientIntake,
+  Provider,
+  Workflow,
+  IntakeField,
+  Role,
+} from "./types";
 
 const SAFETY_KEYWORDS = [
   "diagnose",
@@ -207,6 +177,27 @@ function App() {
   const [slotOptions, setSlotOptions] = useState<string[]>([]);
   const [voiceResumeCount, setVoiceResumeCount] = useState(0);
   const [isAiResponding, setIsAiResponding] = useState(false);
+
+  // Connect to the backend stream to sync phone call messages
+  useEffect(() => {
+    const eventSource = new EventSource(
+      `/api/call/stream?conversationId=${SESSION_REFERENCE}`,
+    );
+    eventSource.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message && message.role && message.text) {
+          setMessages((current) => [
+            ...current,
+            { id: current.length + 1, role: message.role, text: message.text },
+          ]);
+        }
+      } catch (err) {
+        console.error("Failed to parse SSE message", err);
+      }
+    };
+    return () => eventSource.close();
+  }, []);
 
   const pushMessage = (role: Role, text: string) => {
     setMessages((current) => [
@@ -439,7 +430,7 @@ function App() {
       let finalReply = geminiReply;
 
       const bookingMatch = finalReply.match(
-        /\[BOOKING_CONFIRMED(?:[:\-]\s*(.*?))?\]/,
+        /\[BOOKING_CONFIRMED(?:[:-]\s*(.*?))?\]/,
       );
       if (bookingMatch) {
         let extractedProvider, extractedSlot;
@@ -477,215 +468,30 @@ function App() {
 
   return (
     <main className='mx-auto flex w-full max-w-7xl flex-col px-4 py-6 md:px-8'>
-      <header className='rise mb-4 rounded-2xl border border-[var(--border)] bg-[color:var(--panel)] p-4 shadow-[0_10px_40px_rgb(0_0_0_/_0.35)] md:p-6'>
-        <div className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
-          <div>
-            <p className='text-xs font-semibold uppercase tracking-[0.22em] text-[var(--brand)]'>
-              Kyron Medical
-            </p>
-            <h1 className='mt-2 text-2xl leading-tight text-[var(--ink)] md:text-3xl'>
-              Patient Assistant
-            </h1>
-          </div>
-          <button
-            type='button'
-            onClick={handleVoiceHandoff}
-            className='rounded-xl border border-[var(--brand)] bg-[var(--brand)] px-4 py-3 text-sm font-semibold text-[#08101f] transition hover:bg-[var(--brand-strong)]'>
-            Continue on Phone
-          </button>
-        </div>
-      </header>
+      <Header handleVoiceHandoff={handleVoiceHandoff} />
 
       <section className='grid flex-1 gap-4 md:grid-cols-2 items-stretch'>
-        <section className='rise flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4 md:p-5'>
-          <h2 className='text-lg text-[var(--ink)]'>Patient Intake Form</h2>
+        <IntakeForm
+          intakeDraft={intakeDraft}
+          setIntakeDraft={setIntakeDraft}
+          formError={formError}
+          handleIntakeFormSubmit={handleIntakeFormSubmit}
+          resetForm={() => {
+            setIntakeDraft(EMPTY_INTAKE);
+            setFormError(null);
+            setProviderMatch(null);
+            setSlotOptions([]);
+            setWorkflow("intake-pending");
+          }}
+        />
 
-          <form className='mt-4 space-y-3' onSubmit={handleIntakeFormSubmit}>
-            <div className='grid gap-3 sm:grid-cols-2'>
-              <label className='text-sm text-[var(--ink-soft)]'>
-                First name
-                <input
-                  value={intakeDraft.firstName}
-                  onChange={(event) =>
-                    setIntakeDraft((current) => ({
-                      ...current,
-                      firstName: event.target.value,
-                    }))
-                  }
-                  className='mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--brand)]'
-                  placeholder='Jane'
-                />
-              </label>
-              <label className='text-sm text-[var(--ink-soft)]'>
-                Last name
-                <input
-                  value={intakeDraft.lastName}
-                  onChange={(event) =>
-                    setIntakeDraft((current) => ({
-                      ...current,
-                      lastName: event.target.value,
-                    }))
-                  }
-                  className='mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--brand)]'
-                  placeholder='Doe'
-                />
-              </label>
-            </div>
-
-            <label className='block text-sm text-[var(--ink-soft)]'>
-              Date of birth (MM/DD/YYYY)
-              <input
-                value={intakeDraft.dob}
-                onChange={(event) =>
-                  setIntakeDraft((current) => ({
-                    ...current,
-                    dob: event.target.value,
-                  }))
-                }
-                className='mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--brand)]'
-                placeholder='01/31/1990'
-              />
-            </label>
-
-            <label className='block text-sm text-[var(--ink-soft)]'>
-              Phone number
-              <input
-                value={intakeDraft.phone}
-                onChange={(event) =>
-                  setIntakeDraft((current) => ({
-                    ...current,
-                    phone: event.target.value,
-                  }))
-                }
-                className='mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--brand)]'
-                placeholder='(555) 123-4567'
-              />
-            </label>
-
-            <label className='block text-sm text-[var(--ink-soft)]'>
-              Email
-              <input
-                value={intakeDraft.email}
-                onChange={(event) =>
-                  setIntakeDraft((current) => ({
-                    ...current,
-                    email: event.target.value,
-                  }))
-                }
-                className='mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--brand)]'
-                placeholder='jane@example.com'
-              />
-            </label>
-
-            <label className='block text-sm text-[var(--ink-soft)]'>
-              Reason for appointment / body part
-              <textarea
-                value={intakeDraft.reason}
-                onChange={(event) =>
-                  setIntakeDraft((current) => ({
-                    ...current,
-                    reason: event.target.value,
-                  }))
-                }
-                rows={3}
-                className='mt-1 w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--brand)]'
-                placeholder='Example: knee pain and Tuesday availability'
-              />
-            </label>
-
-            <label className='flex items-center gap-2 text-sm text-[var(--ink-soft)]'>
-              <input
-                type='checkbox'
-                checked={intakeDraft.smsOptIn}
-                onChange={(event) =>
-                  setIntakeDraft((current) => ({
-                    ...current,
-                    smsOptIn: event.target.checked,
-                  }))
-                }
-              />
-              Opt in to SMS reminders
-            </label>
-
-            {formError ? (
-              <p className='rounded-lg bg-[#2a1d21] px-3 py-2 text-sm text-[#ff9ea8]'>
-                {formError}
-              </p>
-            ) : null}
-
-            <div className='flex flex-wrap gap-2'>
-              <button
-                type='submit'
-                className='rounded-xl bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-[#08101f] transition hover:bg-[var(--brand-strong)]'>
-                Submit Intake
-              </button>
-              <button
-                type='button'
-                onClick={() => {
-                  setIntakeDraft(EMPTY_INTAKE);
-                  setFormError(null);
-                  setProviderMatch(null);
-                  setSlotOptions([]);
-                  setWorkflow("intake-pending");
-                }}
-                className='rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-2 text-sm font-semibold text-[var(--ink)] transition hover:border-[var(--brand)]'>
-                Reset Form
-              </button>
-            </div>
-          </form>
-        </section>
-
-        <div className='relative h-[500px] min-h-0 md:h-auto'>
-          <div className='absolute inset-0 rise flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--panel)]'>
-            <div className='border-b border-[var(--border)] px-4 py-3 md:px-5'>
-              <h2 className='text-lg text-[var(--ink)]'>Chat</h2>
-            </div>
-
-            <div className='flex-1 min-h-0 space-y-3 overflow-y-auto px-4 py-4 md:px-5'>
-              {messages.map((message) => (
-                <article
-                  key={message.id}
-                  className={`rise max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-relaxed md:max-w-[84%] ${
-                    message.role === "assistant"
-                      ? "bg-[#14223f] text-[var(--ink)]"
-                      : "ml-auto whitespace-pre-line bg-[#1f335c] text-[#d7e6ff]"
-                  }`}>
-                  {message.role === "assistant" ? (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {message.text}
-                    </ReactMarkdown>
-                  ) : (
-                    message.text
-                  )}
-                </article>
-              ))}
-              {isAiResponding ? (
-                <article className='rise max-w-[90%] rounded-2xl bg-[#14223f] px-4 py-3 text-sm text-[var(--ink)] md:max-w-[84%]'>
-                  Thinking...
-                </article>
-              ) : null}
-            </div>
-
-            <form
-              className='border-t border-[var(--border)] p-3 md:p-4'
-              onSubmit={onSubmit}>
-              <div className='flex items-end gap-2'>
-                <textarea
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  rows={1}
-                  placeholder='Ask about scheduling, refill check-ins, or office details...'
-                  className='w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--brand)]'
-                />
-                <button
-                  type='submit'
-                  className='rounded-xl bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-[#08101f] transition hover:bg-[var(--brand-strong)]'>
-                  Send
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <ChatWindow
+          messages={messages}
+          isAiResponding={isAiResponding}
+          input={input}
+          setInput={setInput}
+          onSubmit={onSubmit}
+        />
       </section>
     </main>
   );
