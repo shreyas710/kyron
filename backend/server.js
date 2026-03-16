@@ -23,16 +23,16 @@ app.use("/api/call", callRouter);
 
 app.post("/api/chat/message", async (req, res) => {
     try {
-        const { message, context, messages, conversationId } = req.body || {};
+        const { context, messages, conversationId } = req.body || {};
 
-        if (!message || typeof message !== "string") {
-            return res.status(400).json({ error: "message is required" });
+        if (!messages || !Array.isArray(messages)) {
+            return res.status(400).json({ error: "messages array is required" });
         }
         if (conversationId) {
             conversations[conversationId] = { context, messages };
         }
 
-        const gemini = await callGemini({ message, context, messages });
+        const gemini = await callGemini({ context, messages });
         if (!gemini.ok) {
             return res.status(502).json({ error: gemini.error });
         }

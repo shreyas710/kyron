@@ -42,7 +42,7 @@ function buildSystemPrompt(context = {}) {
         .join("\n\n");
 }
 
-export async function callGemini({ message, context, messages }) {
+export async function callGemini({ context, messages }) {
     if (!GEMINI_API_KEY) {
         return {
             ok: false,

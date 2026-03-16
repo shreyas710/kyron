@@ -250,7 +250,6 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           conversationId: SESSION_REFERENCE,
-          message: userText,
           messages: messages.concat({ role: "user", text: userText }),
           context: overrideContext || getChatContext(),
         }),
@@ -265,24 +264,6 @@ function App() {
     } catch {
       return null;
     }
-  };
-
-  const pickSlotFromInput = (text: string) => {
-    const numeric = Number.parseInt(text, 10);
-    if (
-      !Number.isNaN(numeric) &&
-      numeric >= 1 &&
-      numeric <= slotOptions.length
-    ) {
-      return slotOptions[numeric - 1];
-    }
-
-    const normalized = text.toLowerCase();
-    return (
-      slotOptions.find((slot) =>
-        formatSlot(slot).toLowerCase().includes(normalized),
-      ) ?? null
-    );
   };
 
   const handleVoiceHandoff = async () => {
@@ -397,23 +378,6 @@ function App() {
     setInput("");
     pushMessage("user", text);
 
-    if (workflow === "slot-selection" && providerMatch) {
-      const selected = pickSlotFromInput(text);
-      if (selected) {
-        setWorkflow("booked");
-        const formattedSlot = formatSlot(selected);
-        pushMessage(
-          "assistant",
-          `Appointment booked for ${formattedSlot} with ${providerMatch.name}.`,
-        );
-
-        // Notify user via backend
-        notifyBackend(providerMatch.name, formattedSlot);
-
-        return;
-      }
-    }
-
     if (hasSafetyConcern(text)) {
       pushMessage(
         "assistant",
@@ -448,9 +412,9 @@ function App() {
           .trim();
         setWorkflow("booked");
 
-        const matchedSlot =
-          slotOptions.find((slot) => finalReply.includes(formatSlot(slot))) ||
-          pickSlotFromInput(text);
+        const matchedSlot = slotOptions.find((slot) =>
+          finalReply.includes(formatSlot(slot)),
+        );
 
         notifyBackend(
           extractedProvider || providerMatch?.name || "your provider",
