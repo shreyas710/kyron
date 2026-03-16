@@ -2,6 +2,7 @@ import express from "express";
 import twilio from "twilio";
 import dotenv from "dotenv";
 import { callGemini } from "./gemini.js";
+import { sendNotifications } from "./notify.js";
 
 dotenv.config();
 
@@ -61,7 +62,28 @@ router.post("/twiml", async (req, res) => {
         context: conversation.context,
     });
 
-    const replyText = geminiResponse.reply || "Hello, I am Kyron Care Assistant. How can I help you today?";
+    let replyText = geminiResponse.reply || "Hello, I am Kyron Care Assistant. How can I help you today?";
+    const bookingMatch = replyText.match(/\[BOOKING_CONFIRMED(?:[:\-]\s*(.*?))?\]/);
+    if (bookingMatch) {
+        let extractedProvider, extractedSlot;
+        if (bookingMatch[1]) {
+            const parts = bookingMatch[1].split('|').map(s => s.trim());
+            if (parts.length > 1) {
+                extractedProvider = parts[0];
+                extractedSlot = parts[1];
+            } else {
+                extractedSlot = parts[0];
+            }
+        }
+        replyText = replyText.replace(/\[BOOKING_CONFIRMED[^\]]*\]/g, "").trim();
+        const { intake, providerMatch, slotOptions } = conversation.context;
+        const matchedSlot = extractedSlot || slotOptions?.find((s) => replyText.includes(s)) || "your selected time";
+        sendNotifications({
+            intake: intake || {},
+            providerName: extractedProvider || providerMatch?.name || "your provider",
+            slot: matchedSlot,
+        }).catch(err => console.error("Notification Error:", err.message));
+    }
     conversation.messages.push({ role: "assistant", text: replyText });
 
     const gather = twiml.gather({
@@ -94,7 +116,28 @@ router.post("/gather", async (req, res) => {
             context: conversation.context,
         });
 
-        const replyText = geminiResponse.reply || "I'm sorry, I encountered an error.";
+        let replyText = geminiResponse.reply || "I'm sorry, I encountered an error.";
+        const bookingMatch = replyText.match(/\[BOOKING_CONFIRMED(?:[:\-]\s*(.*?))?\]/);
+        if (bookingMatch) {
+            let extractedProvider, extractedSlot;
+            if (bookingMatch[1]) {
+                const parts = bookingMatch[1].split('|').map(s => s.trim());
+                if (parts.length > 1) {
+                    extractedProvider = parts[0];
+                    extractedSlot = parts[1];
+                } else {
+                    extractedSlot = parts[0];
+                }
+            }
+            replyText = replyText.replace(/\[BOOKING_CONFIRMED[^\]]*\]/g, "").trim();
+            const { intake, providerMatch, slotOptions } = conversation.context;
+            const matchedSlot = extractedSlot || slotOptions?.find((s) => replyText.includes(s) || SpeechResult.includes(s)) || "your selected time";
+            sendNotifications({
+                intake: intake || {},
+                providerName: extractedProvider || providerMatch?.name || "your provider",
+                slot: matchedSlot,
+            }).catch(err => console.error("Notification Error:", err.message));
+        }
         conversation.messages.push({ role: "assistant", text: replyText });
 
         const gather = twiml.gather({

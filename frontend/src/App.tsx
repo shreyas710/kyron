@@ -222,7 +222,37 @@ function App() {
     ).join("\n");
   };
 
-  const askBackendChat = async (userText: string) => {
+  const getChatContext = () => ({
+    workflow,
+    intake,
+    providerMatch,
+    slotOptions: slotOptions.map((slot) => formatSlot(slot)),
+    officeSummary: getOfficeSummary(),
+    providers: PROVIDERS.map((provider) => ({
+      name: provider.name,
+      specialty: provider.specialty,
+      bodyParts: provider.bodyParts,
+      officeName: provider.officeName,
+      address: provider.address,
+      hours: provider.hours,
+      availabilities: provider.availabilities.map((slot) => formatSlot(slot)),
+    })),
+  });
+
+  const notifyBackend = (providerName: string, slot: string) => {
+    fetch("/api/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        intake,
+        providerName,
+        slot,
+      }),
+    }).catch((err) => console.error("Failed to send notification:", err));
+  };
+
+  // Accepts optional overrideContext for up-to-date context
+  const askBackendChat = async (userText: string, overrideContext?: any) => {
     try {
       const response = await fetch("/api/chat/message", {
         method: "POST",
@@ -231,24 +261,7 @@ function App() {
           conversationId: SESSION_REFERENCE,
           message: userText,
           messages: messages.concat({ role: "user", text: userText }),
-          context: {
-            workflow,
-            intake,
-            providerMatch,
-            slotOptions: slotOptions.map((slot) => formatSlot(slot)),
-            officeSummary: getOfficeSummary(),
-            providers: PROVIDERS.map((provider) => ({
-              name: provider.name,
-              specialty: provider.specialty,
-              bodyParts: provider.bodyParts,
-              officeName: provider.officeName,
-              address: provider.address,
-              hours: provider.hours,
-              availabilities: provider.availabilities.map((slot) =>
-                formatSlot(slot),
-              ),
-            })),
-          },
+          context: overrideContext || getChatContext(),
         }),
       });
 
@@ -304,24 +317,7 @@ function App() {
         body: JSON.stringify({
           phoneNumber: intake.phone,
           conversationId: SESSION_REFERENCE,
-          context: {
-            workflow,
-            intake,
-            providerMatch,
-            slotOptions: slotOptions.map((slot) => formatSlot(slot)),
-            officeSummary: getOfficeSummary(),
-            providers: PROVIDERS.map((provider) => ({
-              name: provider.name,
-              specialty: provider.specialty,
-              bodyParts: provider.bodyParts,
-              officeName: provider.officeName,
-              address: provider.address,
-              hours: provider.hours,
-              availabilities: provider.availabilities.map((slot) =>
-                formatSlot(slot),
-              ),
-            })),
-          },
+          context: getChatContext(),
           messages,
         }),
       });
@@ -376,16 +372,21 @@ function App() {
       return;
     }
 
-    // Set context for slot selection, but let Gemini respond
     const allSlots = matchedProvider.availabilities.slice(0, 12);
     setProviderMatch(matchedProvider);
     setSlotOptions(allSlots);
     setWorkflow("slot-selection");
 
-    // Ask Gemini for available times using intake context
     setIsAiResponding(true);
     const geminiReply = await askBackendChat(
       `A patient has completed the intake form. Please match them to a provider and show available appointment times based on their preferences. If they mention a weekday or time, only show those slots. If not, show all available slots. Here is the intake and context.`,
+      {
+        ...getChatContext(),
+        workflow: "slot-selection",
+        intake: normalized,
+        providerMatch: matchedProvider,
+        slotOptions: allSlots.map((slot) => formatSlot(slot)),
+      },
     );
     setIsAiResponding(false);
     if (geminiReply) {
@@ -409,10 +410,15 @@ function App() {
       const selected = pickSlotFromInput(text);
       if (selected) {
         setWorkflow("booked");
+        const formattedSlot = formatSlot(selected);
         pushMessage(
           "assistant",
-          `Appointment booked for ${formatSlot(selected)} with ${providerMatch.name}.`,
+          `Appointment booked for ${formattedSlot} with ${providerMatch.name}.`,
         );
+
+        // Notify user via backend
+        notifyBackend(providerMatch.name, formattedSlot);
+
         return;
       }
     }
@@ -430,7 +436,39 @@ function App() {
     setIsAiResponding(false);
 
     if (geminiReply) {
-      pushMessage("assistant", geminiReply);
+      let finalReply = geminiReply;
+
+      const bookingMatch = finalReply.match(
+        /\[BOOKING_CONFIRMED(?:[:\-]\s*(.*?))?\]/,
+      );
+      if (bookingMatch) {
+        let extractedProvider, extractedSlot;
+        if (bookingMatch[1]) {
+          const parts = bookingMatch[1].split("|").map((s) => s.trim());
+          if (parts.length > 1) {
+            extractedProvider = parts[0];
+            extractedSlot = parts[1];
+          } else {
+            extractedSlot = parts[0];
+          }
+        }
+        finalReply = finalReply
+          .replace(/\[BOOKING_CONFIRMED[^\]]*\]/g, "")
+          .trim();
+        setWorkflow("booked");
+
+        const matchedSlot =
+          slotOptions.find((slot) => finalReply.includes(formatSlot(slot))) ||
+          pickSlotFromInput(text);
+
+        notifyBackend(
+          extractedProvider || providerMatch?.name || "your provider",
+          extractedSlot ||
+            (matchedSlot ? formatSlot(matchedSlot) : "your selected time"),
+        );
+      }
+
+      pushMessage("assistant", finalReply);
       return;
     }
 

@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { callGemini } from "./gemini.js";
+import { sendNotifications } from "./notify.js";
 import callRouter, { conversations } from "./call.js";
 
 dotenv.config();
@@ -38,6 +39,19 @@ app.post("/api/chat/message", async (req, res) => {
         return res.json({ reply: gemini.reply });
     } catch (error) {
         return res.status(500).json({ error: String(error) });
+    }
+});
+
+app.post("/api/notify", async (req, res) => {
+    try {
+        const { intake, providerName, slot } = req.body;
+        if (!intake || !providerName || !slot) {
+            return res.status(400).json({ error: "intake, providerName, and slot are required" });
+        }
+        await sendNotifications({ intake, providerName, slot });
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: String(error) });
     }
 });
 

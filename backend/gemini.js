@@ -22,6 +22,7 @@ function buildSystemPrompt(context = {}) {
         "Keep responses concise and clear.",
         "Intake fields are collected in the intake form, not in chat.",
         "When showing appointment slots, use the user's context and preferences (such as weekday or time mentioned in their reason or chat) to filter and present only the most relevant slots. For example, if the user requests Tuesday, only show Tuesday slots. If no preference is given, show all available slots. Do not ask the user to repeat their preference if it is already present in the context.",
+        "If the user confirms an available slot to book the appointment, include the exact string '[BOOKING_CONFIRMED: <Provider Name> | <Slot Time>]' in your response. Replace the placeholders with the actual provider name and selected time.",
         workflow ? `Current workflow: ${workflow}.` : "",
         providerMatch?.name
             ? `Matched provider: ${providerMatch.name} (${providerMatch.specialty || "Unknown specialty"}).`
