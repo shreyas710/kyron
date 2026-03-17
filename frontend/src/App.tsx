@@ -180,16 +180,30 @@ function App() {
 
   // Connect to the backend stream to sync phone call messages
   useEffect(() => {
+    // It falls back to an empty string locally so your local dev proxy still works.
+    const BACKEND_URL = import.meta.env.DEV
+      ? ""
+      : "https://jerry-prepalatal-forest.ngrok-free.dev";
+
     const eventSource = new EventSource(
-      `/api/call/stream?conversationId=${SESSION_REFERENCE}`,
+      `${BACKEND_URL}/api/call/stream?conversationId=${SESSION_REFERENCE}`,
     );
     eventSource.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
         if (message && message.role && message.text) {
+          let text = message.text;
+          if (
+            message.role === "assistant" &&
+            text.match(/\[BOOKING_CONFIRMED[^\]]*\]/)
+          ) {
+            text = text.replace(/\[BOOKING_CONFIRMED[^\]]*\]/g, "").trim();
+            setWorkflow((prev) => (prev !== "booked" ? "booked" : prev));
+          }
+
           setMessages((current) => [
             ...current,
-            { id: current.length + 1, role: message.role, text: message.text },
+            { id: current.length + 1, role: message.role, text },
           ]);
         }
       } catch (err) {
