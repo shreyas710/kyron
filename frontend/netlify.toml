@@ -5,6 +5,6 @@
 # Proxy /api requests to your EC2 Backend
 [[redirects]]
   from = "/api/*"
-  to = "http://13.57.14.110/api/:splat"
+  to = "http://54.193.34.134/api/:splat"
   status = 200
   force = true
