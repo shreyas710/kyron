@@ -91,7 +91,6 @@ router.post("/twiml", async (req, res) => {
     });
 
     let replyText = geminiResponse.reply || "Hello, I am Kyron Care Assistant. How can I help you today?";
-    let spokenText = replyText;
     const bookingMatch = replyText.match(/\[BOOKING_CONFIRMED(?:[:\-]\s*(.*?))?\]/);
     if (bookingMatch) {
         let extractedProvider, extractedSlot;
@@ -104,17 +103,15 @@ router.post("/twiml", async (req, res) => {
                 extractedSlot = parts[0];
             }
         }
-        spokenText = replyText.replace(/\[BOOKING_CONFIRMED[^\]]*\]/g, "").trim();
-        conversation.context.workflow = "booked";
+        replyText = replyText.replace(/\[BOOKING_CONFIRMED[^\]]*\]/g, "").trim();
         const { intake, providerMatch, slotOptions } = conversation.context;
-        const matchedSlot = extractedSlot || slotOptions?.find((s) => spokenText.includes(s)) || "your selected time";
+        const matchedSlot = extractedSlot || slotOptions?.find((s) => replyText.includes(s)) || "your selected time";
         sendNotifications({
             intake: intake || {},
             providerName: extractedProvider || providerMatch?.name || "your provider",
             slot: matchedSlot,
         }).catch(err => console.error("Notification Error:", err.message));
     }
-    // Save and broadcast the UNSTRIPPED reply so the frontend UI can catch the tag
     conversation.messages.push({ role: "assistant", text: replyText });
     notifyClients(conversationId, { role: "assistant", text: replyText });
 
@@ -123,7 +120,7 @@ router.post("/twiml", async (req, res) => {
         action: `/api/call/gather?conversationId=${conversationId}`,
         speechTimeout: "auto",
     });
-    gather.say(spokenText);
+    gather.say(replyText);
 
     res.type("text/xml").send(twiml.toString());
 });
@@ -150,7 +147,6 @@ router.post("/gather", async (req, res) => {
         });
 
         let replyText = geminiResponse.reply || "I'm sorry, I encountered an error.";
-        let spokenText = replyText;
         const bookingMatch = replyText.match(/\[BOOKING_CONFIRMED(?:[:\-]\s*(.*?))?\]/);
         if (bookingMatch) {
             let extractedProvider, extractedSlot;
@@ -163,10 +159,9 @@ router.post("/gather", async (req, res) => {
                     extractedSlot = parts[0];
                 }
             }
-            spokenText = replyText.replace(/\[BOOKING_CONFIRMED[^\]]*\]/g, "").trim();
-            conversation.context.workflow = "booked";
+            replyText = replyText.replace(/\[BOOKING_CONFIRMED[^\]]*\]/g, "").trim();
             const { intake, providerMatch, slotOptions } = conversation.context;
-            const matchedSlot = extractedSlot || slotOptions?.find((s) => spokenText.includes(s) || SpeechResult.includes(s)) || "your selected time";
+            const matchedSlot = extractedSlot || slotOptions?.find((s) => replyText.includes(s) || SpeechResult.includes(s)) || "your selected time";
             sendNotifications({
                 intake: intake || {},
                 providerName: extractedProvider || providerMatch?.name || "your provider",
@@ -181,7 +176,7 @@ router.post("/gather", async (req, res) => {
             action: `/api/call/gather?conversationId=${conversationId}`,
             speechTimeout: "auto",
         });
-        gather.say(spokenText);
+        gather.say(replyText);
     } else {
         twiml.say("I didn't catch that. Goodbye.");
         twiml.hangup();
