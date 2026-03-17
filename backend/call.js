@@ -18,33 +18,14 @@ const {
 const twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 
 export const conversations = {};
-export const clients = {};
 
-export function notifyClients(conversationId, message) {
-    if (clients[conversationId]) {
-        clients[conversationId].forEach(client => {
-            client.write(`data: ${JSON.stringify(message)}\n\n`);
-        });
-    }
-}
-
-router.get("/stream", (req, res) => {
+router.get("/sync", (req, res) => {
     const { conversationId } = req.query;
-    if (!conversationId) return res.status(400).end();
-
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.flushHeaders();
-
-    if (!clients[conversationId]) {
-        clients[conversationId] = [];
+    const conversation = conversations[conversationId];
+    if (!conversation) {
+        return res.json({ messages: [] });
     }
-    clients[conversationId].push(res);
-
-    req.on("close", () => {
-        clients[conversationId] = clients[conversationId].filter(client => client !== res);
-    });
+    res.json({ messages: conversation.messages });
 });
 
 router.post("/initiate", async (req, res) => {
@@ -113,7 +94,6 @@ router.post("/twiml", async (req, res) => {
         }).catch(err => console.error("Notification Error:", err.message));
     }
     conversation.messages.push({ role: "assistant", text: replyText });
-    notifyClients(conversationId, { role: "assistant", text: replyText });
 
     const gather = twiml.gather({
         input: "speech",
@@ -139,7 +119,6 @@ router.post("/gather", async (req, res) => {
 
     if (SpeechResult) {
         conversation.messages.push({ role: "user", text: SpeechResult });
-        notifyClients(conversationId, { role: "user", text: SpeechResult });
 
         const geminiResponse = await callGemini({
             messages: conversation.messages,
@@ -169,7 +148,6 @@ router.post("/gather", async (req, res) => {
             }).catch(err => console.error("Notification Error:", err.message));
         }
         conversation.messages.push({ role: "assistant", text: replyText });
-        notifyClients(conversationId, { role: "assistant", text: replyText });
 
         const gather = twiml.gather({
             input: "speech",
