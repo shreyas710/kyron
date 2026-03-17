@@ -250,7 +250,11 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           conversationId: SESSION_REFERENCE,
-          messages: messages.concat({ role: "user", text: userText }),
+          messages: messages.concat({
+            id: messages.length + 1,
+            role: "user",
+            text: userText,
+          }),
           context: overrideContext || getChatContext(),
         }),
       });
