@@ -178,35 +178,25 @@ function App() {
   const [voiceResumeCount, setVoiceResumeCount] = useState(0);
   const [isAiResponding, setIsAiResponding] = useState(false);
 
-  // Poll the backend to sync phone call messages (Netlify proxies buffer SSE streams)
+  // Connect to the backend stream to sync phone call messages
   useEffect(() => {
-    const interval = setInterval(async () => {
+    const eventSource = new EventSource(
+      `/api/call/stream?conversationId=${SESSION_REFERENCE}`,
+    );
+    eventSource.onmessage = (event) => {
       try {
-        const res = await fetch(`/api/call/sync?conversationId=${SESSION_REFERENCE}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.messages && Array.isArray(data.messages)) {
-            setMessages((current) => {
-              if (data.messages.length > current.length) {
-                const newMessages = data.messages
-                  .slice(current.length)
-                  .map((msg: any, i: number) => ({
-                    id: current.length + i + 1,
-                    role: msg.role,
-                    text: msg.text,
-                  }));
-                return [...current, ...newMessages];
-              }
-              return current;
-            });
-          }
+        const message = JSON.parse(event.data);
+        if (message && message.role && message.text) {
+          setMessages((current) => [
+            ...current,
+            { id: current.length + 1, role: message.role, text: message.text },
+          ]);
         }
       } catch (err) {
-        // Ignore network errors during polling
+        console.error("Failed to parse SSE message", err);
       }
-    }, 2000);
-
-    return () => clearInterval(interval);
+    };
+    return () => eventSource.close();
   }, []);
 
   const pushMessage = (role: Role, text: string) => {
