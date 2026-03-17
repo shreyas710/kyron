@@ -2,9 +2,9 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { callGemini } from "./gemini.js";
-import { sendNotifications } from "./notify.js";
-import callRouter, { conversations } from "./call.js";
+import { callGemini } from "./routes/gemini.js";
+import { sendNotifications } from "./routes/notify.js";
+import callRouter, { conversations } from "./routes/call.js";
 
 dotenv.config();
 

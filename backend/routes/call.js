@@ -1,8 +1,8 @@
 import express from "express";
 import twilio from "twilio";
 import dotenv from "dotenv";
-import { callGemini } from "./gemini.js";
-import { sendNotifications } from "./notify.js";
+import { callGemini } from "../routes/gemini.js";
+import { sendNotifications } from "../routes/notify.js";
 
 dotenv.config();
 
